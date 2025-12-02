@@ -1,0 +1,903 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>NEON TETRIS 3D</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --neon-blue: #0ff;
+            --neon-pink: #f0f;
+            --neon-green: #0f0;
+            --bg-color: #050510;
+        }
+
+        body {
+            margin: 0;
+            overflow: hidden;
+            background-color: var(--bg-color);
+            font-family: 'Orbitron', sans-serif;
+            color: white;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+
+        #canvas-container {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 1;
+        }
+
+        /* UI Layer */
+        #ui-layer {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 10;
+            pointer-events: none; /* Let clicks pass through to controls if needed */
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+        }
+
+        /* CRT Scanline Effect */
+        #scanlines {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            background: linear-gradient(
+                to bottom,
+                rgba(255, 255, 255, 0),
+                rgba(255, 255, 255, 0) 50%,
+                rgba(0, 0, 0, 0.2) 50%,
+                rgba(0, 0, 0, 0.2)
+            );
+            background-size: 100% 4px;
+            z-index: 999;
+            pointer-events: none;
+            opacity: 0.6;
+        }
+        
+        #vignette {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            background: radial-gradient(circle, rgba(0,0,0,0) 60%, rgba(0,0,0,0.8) 100%);
+            z-index: 998;
+            pointer-events: none;
+        }
+
+        /* HUD */
+        .hud-panel {
+            padding: 20px;
+            text-shadow: 0 0 10px var(--neon-blue);
+        }
+
+        .score-box {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            text-align: left;
+        }
+
+        .next-box {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            text-align: right;
+        }
+
+        h1 {
+            font-size: 2rem;
+            margin: 0;
+            background: -webkit-linear-gradient(45deg, var(--neon-blue), var(--neon-pink));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            text-shadow: 0 0 20px rgba(0, 255, 255, 0.5);
+            letter-spacing: 2px;
+        }
+
+        .label {
+            font-size: 0.8rem;
+            color: #aaa;
+            margin-top: 5px;
+        }
+
+        .value {
+            font-size: 1.5rem;
+            color: white;
+        }
+
+        /* Overlay Screens */
+        #start-screen, #game-over-screen {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(5, 5, 16, 0.85);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 100;
+            pointer-events: auto;
+            backdrop-filter: blur(5px);
+        }
+
+        .hidden {
+            display: none !important;
+        }
+
+        .cyber-btn {
+            background: transparent;
+            border: 2px solid var(--neon-blue);
+            color: var(--neon-blue);
+            padding: 15px 40px;
+            font-family: 'Orbitron', sans-serif;
+            font-size: 1.2rem;
+            cursor: pointer;
+            margin-top: 20px;
+            text-transform: uppercase;
+            box-shadow: 0 0 10px var(--neon-blue), inset 0 0 10px var(--neon-blue);
+            transition: all 0.2s;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .cyber-btn:hover {
+            background: var(--neon-blue);
+            color: #000;
+            box-shadow: 0 0 30px var(--neon-blue), inset 0 0 20px var(--neon-blue);
+        }
+
+        .glitch-text {
+            font-size: 4rem;
+            font-weight: 900;
+            text-transform: uppercase;
+            position: relative;
+            text-shadow: 2px 2px var(--neon-pink), -2px -2px var(--neon-blue);
+            animation: glitch 1s infinite alternate;
+        }
+
+        @keyframes glitch {
+            0% { transform: translate(0); }
+            20% { transform: translate(-2px, 2px); }
+            40% { transform: translate(-2px, -2px); }
+            60% { transform: translate(2px, 2px); }
+            80% { transform: translate(2px, -2px); }
+            100% { transform: translate(0); }
+        }
+
+        /* Touch Controls */
+        #controls {
+            position: absolute;
+            bottom: 20px;
+            left: 0;
+            width: 100%;
+            height: 180px;
+            z-index: 50;
+            pointer-events: none; /* Allow clicks to pass through empty areas */
+            display: flex;
+            justify-content: space-between;
+            padding: 0 20px;
+            box-sizing: border-box;
+        }
+
+        /* Show controls on touch devices or small screens, hide on desktop */
+        @media (min-width: 1024px) {
+            #controls { display: none; }
+        }
+
+        .control-group {
+            pointer-events: auto;
+            display: flex;
+            gap: 15px;
+            align-items: flex-end;
+        }
+
+        .c-btn {
+            width: 60px;
+            height: 60px;
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid var(--neon-blue);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 24px;
+            color: white;
+            backdrop-filter: blur(4px);
+            touch-action: manipulation;
+            box-shadow: 0 0 10px rgba(0, 255, 255, 0.2);
+        }
+
+        .c-btn:active {
+            background: var(--neon-blue);
+            color: black;
+        }
+
+        .c-btn.big {
+            width: 80px;
+            height: 80px;
+            border-color: var(--neon-pink);
+            box-shadow: 0 0 10px rgba(255, 0, 255, 0.2);
+        }
+        
+        .c-btn.big:active {
+            background: var(--neon-pink);
+        }
+
+    </style>
+</head>
+<body>
+
+    <div id="scanlines"></div>
+    <div id="vignette"></div>
+
+    <div id="canvas-container"></div>
+
+    <div id="ui-layer">
+        <div class="score-box hud-panel">
+            <h1>NEON TETRIS</h1>
+            <div class="label">SCORE</div>
+            <div class="value" id="score">0</div>
+            <div class="label">LEVEL</div>
+            <div class="value" id="level">1</div>
+        </div>
+        <div class="next-box hud-panel">
+            <div class="label">NEXT</div>
+            <div class="value" id="next-piece-display"></div>
+        </div>
+    </div>
+
+    <!-- Touch Controls -->
+    <div id="controls">
+        <div class="control-group">
+            <div class="c-btn" id="btn-left">←</div>
+            <div class="c-btn" id="btn-down">↓</div>
+            <div class="c-btn" id="btn-right">→</div>
+        </div>
+        <div class="control-group">
+            <div class="c-btn big" id="btn-rotate">↻</div>
+        </div>
+    </div>
+
+    <div id="start-screen">
+        <div class="glitch-text">TETRIS 3D</div>
+        <p style="margin-bottom: 30px; color: #ccc;">SYSTEM READY // AWAITING INPUT</p>
+        <button class="cyber-btn" id="start-btn">INITIALIZE</button>
+        <div style="margin-top: 20px; font-size: 0.8rem; color: #888;">
+            ARROWS to Move/Rotate<br>
+            SPACE to Drop
+        </div>
+    </div>
+
+    <div id="game-over-screen" class="hidden">
+        <div class="glitch-text" style="color:red; text-shadow: 2px 2px red;">SYSTEM FAILURE</div>
+        <p class="value" style="margin: 20px;">SCORE: <span id="final-score">0</span></p>
+        <button class="cyber-btn" id="restart-btn">REBOOT SYSTEM</button>
+    </div>
+
+<script>
+/**
+ * AUDIO SYSTEM
+ * Real-time synthesis using Web Audio API to avoid external asset loading.
+ */
+class SoundManager {
+    constructor() {
+        this.ctx = null;
+        this.masterGain = null;
+        this.initialized = false;
+    }
+
+    init() {
+        if (this.initialized) return;
+        const AudioContext = window.AudioContext || window.webkitAudioContext;
+        this.ctx = new AudioContext();
+        this.masterGain = this.ctx.createGain();
+        this.masterGain.gain.value = 0.3; // Prevent ear damage
+        this.masterGain.connect(this.ctx.destination);
+        this.initialized = true;
+        this.startAmbience();
+    }
+
+    playOscillator(type, freq, duration, type2 = 'sine') {
+        if (!this.initialized) return;
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        
+        osc.type = type;
+        osc.frequency.setValueAtTime(freq, this.ctx.currentTime);
+        
+        gain.gain.setValueAtTime(0.5, this.ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + duration);
+
+        osc.connect(gain);
+        gain.connect(this.masterGain);
+        
+        osc.start();
+        osc.stop(this.ctx.currentTime + duration);
+    }
+
+    move() {
+        this.playOscillator('triangle', 300, 0.1);
+    }
+
+    rotate() {
+        this.playOscillator('square', 400, 0.15);
+    }
+
+    drop() {
+        this.playOscillator('sawtooth', 150, 0.3);
+    }
+
+    clear(lines) {
+        // Chord for clear
+        const base = 440 + (lines * 100);
+        this.playOscillator('sine', base, 0.5);
+        this.playOscillator('triangle', base * 1.5, 0.5);
+        setTimeout(() => this.playOscillator('square', base * 2, 0.5), 100);
+    }
+
+    gameOver() {
+        if (!this.initialized) return;
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(100, this.ctx.currentTime);
+        osc.frequency.exponentialRampToValueAtTime(10, this.ctx.currentTime + 2);
+        
+        gain.gain.setValueAtTime(0.5, this.ctx.currentTime);
+        gain.gain.linearRampToValueAtTime(0, this.ctx.currentTime + 2);
+
+        osc.connect(gain);
+        gain.connect(this.masterGain);
+        osc.start();
+        osc.stop(this.ctx.currentTime + 2);
+    }
+
+    startAmbience() {
+        // Low drone
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        const lfo = this.ctx.createOscillator();
+        
+        osc.type = 'sine';
+        osc.frequency.value = 50; // Low bass
+        
+        lfo.type = 'sine';
+        lfo.frequency.value = 0.1; // Slow modulation
+        lfo.connect(gain.gain);
+
+        gain.gain.value = 0.1;
+        osc.connect(gain);
+        gain.connect(this.masterGain);
+        osc.start();
+    }
+}
+
+/**
+ * GAME LOGIC & THREE.JS
+ */
+const COLS = 10;
+const ROWS = 20;
+const BLOCK_SIZE = 1;
+
+// Tetromino Definitions
+const SHAPES = [
+    [], // Empty for 0 index
+    [[0,0], [1,0], [2,0], [3,0]], // I (Cyan)
+    [[0,0], [1,0], [0,1], [1,1]], // O (Yellow)
+    [[1,0], [0,1], [1,1], [2,1]], // T (Purple)
+    [[1,0], [2,0], [0,1], [1,1]], // S (Green)
+    [[0,0], [1,0], [1,1], [2,1]], // Z (Red)
+    [[0,0], [0,1], [1,1], [2,1]], // J (Blue)
+    [[2,0], [0,1], [1,1], [2,1]]  // L (Orange)
+];
+
+const COLORS = [
+    0x000000,
+    0x00ffff, // I
+    0xffff00, // O
+    0xaa00ff, // T
+    0x00ff00, // S
+    0xff0000, // Z
+    0x0000ff, // J
+    0xffaa00  // L
+];
+
+const EMISSIVE_INTENSITY = 0.6;
+
+class Tetris3D {
+    constructor() {
+        this.sound = new SoundManager();
+        this.scene = new THREE.Scene();
+        this.scene.fog = new THREE.FogExp2(0x050510, 0.02);
+
+        this.camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
+        this.camera.position.set(5, 10, 25);
+        this.camera.lookAt(5, 10, 0);
+
+        this.renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+        this.renderer.setSize(window.innerWidth, window.innerHeight);
+        this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+        document.getElementById('canvas-container').appendChild(this.renderer.domElement);
+
+        // Lighting
+        const ambientLight = new THREE.AmbientLight(0x404040);
+        this.scene.add(ambientLight);
+
+        // Cyberpunk Grid Lights
+        const light1 = new THREE.PointLight(0x00ffff, 1, 50);
+        light1.position.set(0, 20, 10);
+        this.scene.add(light1);
+        
+        const light2 = new THREE.PointLight(0xff00ff, 1, 50);
+        light2.position.set(10, 0, 10);
+        this.scene.add(light2);
+
+        // Game State
+        this.grid = Array(ROWS).fill().map(() => Array(COLS).fill(0));
+        this.meshGrid = Array(ROWS).fill().map(() => Array(COLS).fill(null));
+        
+        this.score = 0;
+        this.level = 1;
+        this.linesClearedTotal = 0;
+        this.gameOver = false;
+        this.paused = true;
+
+        this.currentPiece = null;
+        this.nextPieceType = this.randomPieceType();
+
+        // Animation Loop
+        this.lastTime = 0;
+        this.dropCounter = 0;
+        this.dropInterval = 1000;
+
+        // Particle System
+        this.particles = [];
+
+        this.initEnvironment();
+        this.setupControls();
+        
+        window.addEventListener('resize', () => this.onResize());
+        
+        // Start Loop
+        this.animate();
+    }
+
+    initEnvironment() {
+        // The Board Frame
+        const frameGeo = new THREE.BoxGeometry(COLS, ROWS, 1);
+        const edges = new THREE.EdgesGeometry(frameGeo);
+        const lineMat = new THREE.LineBasicMaterial({ color: 0x333333 });
+        const frame = new THREE.LineSegments(edges, lineMat);
+        frame.position.set(4.5, 9.5, -0.5);
+        this.scene.add(frame);
+
+        // Background Grid (Floor/Ceiling illusion)
+        const gridHelper = new THREE.GridHelper(100, 50, 0x111111, 0x050520);
+        gridHelper.position.y = -5;
+        this.scene.add(gridHelper);
+
+        // Moving background stars/data
+        const starGeo = new THREE.BufferGeometry();
+        const starCount = 500;
+        const posArray = new Float32Array(starCount * 3);
+        for(let i=0; i<starCount*3; i++) {
+            posArray[i] = (Math.random() - 0.5) * 100;
+        }
+        starGeo.setAttribute('position', new THREE.BufferAttribute(posArray, 3));
+        const starMat = new THREE.PointsMaterial({
+            size: 0.1, 
+            color: 0x00ffff,
+            transparent: true,
+            opacity: 0.5
+        });
+        this.starMesh = new THREE.Points(starGeo, starMat);
+        this.scene.add(this.starMesh);
+    }
+
+    startGame() {
+        this.sound.init();
+        // Reset Logic
+        this.grid = Array(ROWS).fill().map(() => Array(COLS).fill(0));
+        this.score = 0;
+        this.level = 1;
+        this.linesClearedTotal = 0;
+        this.dropInterval = 1000;
+        this.gameOver = false;
+        this.paused = false;
+
+        this.updateUI();
+
+        // Clear existing meshes
+        for(let y=0; y<ROWS; y++){
+            for(let x=0; x<COLS; x++){
+                if(this.meshGrid[y][x]) {
+                    this.scene.remove(this.meshGrid[y][x]);
+                    this.meshGrid[y][x] = null;
+                }
+            }
+        }
+        if(this.currentPiece) {
+            this.scene.remove(this.currentPiece.group);
+            this.currentPiece = null;
+        }
+
+        document.getElementById('start-screen').classList.add('hidden');
+        document.getElementById('game-over-screen').classList.add('hidden');
+        
+        this.spawnPiece();
+    }
+
+    randomPieceType() {
+        return Math.floor(Math.random() * 7) + 1;
+    }
+
+    spawnPiece() {
+        const type = this.nextPieceType;
+        this.nextPieceType = this.randomPieceType();
+        this.updateNextPieceUI();
+
+        const shape = SHAPES[type];
+        const color = COLORS[type];
+
+        this.currentPiece = {
+            type: type,
+            shape: shape, // Coordinates relative to pivot
+            color: color,
+            x: 3,
+            y: ROWS - 2, // Start high
+            group: new THREE.Group()
+        };
+
+        // Create 3D Meshes for the piece
+        shape.forEach(p => {
+            const geom = new THREE.BoxGeometry(0.9, 0.9, 0.9);
+            const mat = new THREE.MeshStandardMaterial({ 
+                color: color,
+                emissive: color,
+                emissiveIntensity: EMISSIVE_INTENSITY,
+                roughness: 0.2,
+                metalness: 0.8
+            });
+            const mesh = new THREE.Mesh(geom, mat);
+            mesh.position.set(p[0], p[1], 0);
+            this.currentPiece.group.add(mesh);
+        });
+
+        this.updatePieceMeshPosition();
+        this.scene.add(this.currentPiece.group);
+
+        // Check immediate collision (Game Over)
+        if (this.checkCollision(0, 0, this.currentPiece.shape)) {
+            this.handleGameOver();
+        }
+    }
+
+    updatePieceMeshPosition() {
+        if(!this.currentPiece) return;
+        this.currentPiece.group.position.set(this.currentPiece.x, this.currentPiece.y, 0);
+    }
+
+    // Logic: 0 = valid, 1 = collision
+    checkCollision(offX, offY, shape) {
+        for (let p of shape) {
+            let newX = this.currentPiece.x + p[0] + offX;
+            let newY = this.currentPiece.y + p[1] + offY;
+
+            if (newX < 0 || newX >= COLS || newY < 0) return true;
+            if (newY < ROWS && this.grid[newY][newX] !== 0) return true;
+        }
+        return false;
+    }
+
+    rotatePiece() {
+        if (!this.currentPiece || this.paused) return;
+
+        // Clone current shape to test rotation
+        const currentShape = this.currentPiece.shape;
+        const newShape = currentShape.map(p => [-p[1], p[0]]); // 90 degree rotation
+
+        // Wall kick logic (basic)
+        let kicks = [0, 1, -1, 2, -2];
+        
+        for (let k of kicks) {
+            if (!this.checkCollision(k, 0, newShape)) {
+                this.currentPiece.x += k;
+                this.currentPiece.shape = newShape;
+                
+                // Update 3D meshes within the group
+                this.currentPiece.group.clear(); // Remove old meshes
+                newShape.forEach(p => {
+                    const geom = new THREE.BoxGeometry(0.9, 0.9, 0.9);
+                    const mat = new THREE.MeshStandardMaterial({ 
+                        color: this.currentPiece.color,
+                        emissive: this.currentPiece.color,
+                        emissiveIntensity: EMISSIVE_INTENSITY
+                    });
+                    const mesh = new THREE.Mesh(geom, mat);
+                    mesh.position.set(p[0], p[1], 0);
+                    this.currentPiece.group.add(mesh);
+                });
+                
+                this.updatePieceMeshPosition();
+                this.sound.rotate();
+                return;
+            }
+        }
+    }
+
+    movePiece(dir) {
+        if (!this.currentPiece || this.paused) return;
+        if (!this.checkCollision(dir, 0, this.currentPiece.shape)) {
+            this.currentPiece.x += dir;
+            this.updatePieceMeshPosition();
+            this.sound.move();
+        }
+    }
+
+    dropPiece() {
+        if (!this.currentPiece || this.paused) return;
+        if (!this.checkCollision(0, -1, this.currentPiece.shape)) {
+            this.currentPiece.y--;
+            this.updatePieceMeshPosition();
+            this.dropCounter = 0; // Reset auto drop timer
+        } else {
+            this.lockPiece();
+        }
+    }
+
+    hardDrop() {
+        if (!this.currentPiece || this.paused) return;
+        while (!this.checkCollision(0, -1, this.currentPiece.shape)) {
+            this.currentPiece.y--;
+        }
+        this.updatePieceMeshPosition();
+        this.sound.drop();
+        this.lockPiece();
+    }
+
+    lockPiece() {
+        // Transfer piece to grid
+        const shape = this.currentPiece.shape;
+        const cx = this.currentPiece.x;
+        const cy = this.currentPiece.y;
+        const color = this.currentPiece.color;
+
+        shape.forEach(p => {
+            const x = cx + p[0];
+            const y = cy + p[1];
+            if (y >= 0 && y < ROWS && x >= 0 && x < COLS) {
+                this.grid[y][x] = this.currentPiece.type;
+                
+                // Create static mesh
+                const geom = new THREE.BoxGeometry(0.9, 0.9, 0.9);
+                const mat = new THREE.MeshStandardMaterial({ 
+                    color: color,
+                    emissive: color,
+                    emissiveIntensity: 0.4
+                });
+                const mesh = new THREE.Mesh(geom, mat);
+                mesh.position.set(x, y, 0);
+                this.scene.add(mesh);
+                this.meshGrid[y][x] = mesh;
+            }
+        });
+
+        this.scene.remove(this.currentPiece.group);
+        this.currentPiece = null;
+
+        this.clearLines();
+        this.spawnPiece();
+    }
+
+    spawnExplosion(y) {
+        // Simple particle explosion for line clear
+        const geo = new THREE.BoxGeometry(0.2, 0.2, 0.2);
+        const mat = new THREE.MeshBasicMaterial({ color: 0xffffff });
+        
+        for(let i=0; i<20; i++) {
+            const mesh = new THREE.Mesh(geo, mat);
+            mesh.position.set(Math.random() * COLS, y, (Math.random()-0.5) * 2);
+            
+            // Velocity
+            mesh.userData.vel = new THREE.Vector3(
+                (Math.random()-0.5) * 0.5,
+                (Math.random()-0.5) * 0.5,
+                (Math.random()-0.5) * 0.5
+            );
+            
+            this.scene.add(mesh);
+            this.particles.push(mesh);
+        }
+    }
+
+    clearLines() {
+        let linesCleared = 0;
+
+        for (let y = ROWS - 1; y >= 0; y--) {
+            let full = true;
+            for (let x = 0; x < COLS; x++) {
+                if (this.grid[y][x] === 0) {
+                    full = false;
+                    break;
+                }
+            }
+
+            if (full) {
+                // Remove visuals
+                for(let x=0; x<COLS; x++) {
+                    this.scene.remove(this.meshGrid[y][x]);
+                    this.meshGrid[y][x] = null;
+                }
+                
+                // Shift data down
+                for (let yy = y; yy < ROWS - 1; yy++) {
+                    for (let x = 0; x < COLS; x++) {
+                        this.grid[yy][x] = this.grid[yy+1][x];
+                        this.meshGrid[yy][x] = this.meshGrid[yy+1][x];
+                        if(this.meshGrid[yy][x]) {
+                            this.meshGrid[yy][x].position.set(x, yy, 0);
+                        }
+                    }
+                }
+                
+                // Clear top row
+                for(let x=0; x<COLS; x++) {
+                    this.grid[ROWS-1][x] = 0;
+                    this.meshGrid[ROWS-1][x] = null;
+                }
+
+                this.spawnExplosion(y);
+
+                y++; // Check same row index again since we pulled down
+                linesCleared++;
+            }
+        }
+
+        if (linesCleared > 0) {
+            this.sound.clear(linesCleared);
+            // Scoring
+            const points = [0, 100, 300, 500, 800]; // 1, 2, 3, 4 lines
+            this.score += points[linesCleared] * this.level;
+            
+            this.linesClearedTotal += linesCleared;
+            if(this.linesClearedTotal >= this.level * 10) {
+                this.level++;
+                this.dropInterval = Math.max(100, 1000 - (this.level - 1) * 100);
+            }
+            this.updateUI();
+            
+            // Screen shake effect logic could go here
+            this.camera.position.z -= 0.5;
+            setTimeout(() => this.camera.position.z += 0.5, 50);
+        }
+    }
+
+    handleGameOver() {
+        this.gameOver = true;
+        this.paused = true;
+        this.sound.gameOver();
+        document.getElementById('final-score').innerText = this.score;
+        document.getElementById('game-over-screen').classList.remove('hidden');
+    }
+
+    updateUI() {
+        document.getElementById('score').innerText = this.score;
+        document.getElementById('level').innerText = this.level;
+    }
+
+    updateNextPieceUI() {
+        // Text representation of next piece
+        const names = ['?', 'I', 'O', 'T', 'S', 'Z', 'J', 'L'];
+        document.getElementById('next-piece-display').innerText = names[this.nextPieceType];
+        document.getElementById('next-piece-display').style.color = '#' + COLORS[this.nextPieceType].toString(16).padStart(6, '0');
+    }
+
+    setupControls() {
+        document.addEventListener('keydown', (e) => {
+            if(this.gameOver) return;
+            switch(e.code) {
+                case 'ArrowLeft': this.movePiece(-1); break;
+                case 'ArrowRight': this.movePiece(1); break;
+                case 'ArrowDown': this.dropPiece(); break;
+                case 'ArrowUp': this.rotatePiece(); break;
+                case 'Space': this.hardDrop(); break;
+            }
+        });
+
+        // Touch Controls
+        const handleTouch = (id, action) => {
+            const btn = document.getElementById(id);
+            if(!btn) return;
+            
+            // Prevent default touch actions (scrolling/zoom)
+            btn.addEventListener('touchstart', (e) => {
+                e.preventDefault();
+                if(this.gameOver) return;
+                
+                action();
+                
+                // Repeat for movement buttons
+                if(id !== 'btn-rotate' && id !== 'btn-hard') {
+                   // Optional: Add hold-to-move logic here if desired
+                }
+            }, {passive: false});
+        };
+
+        handleTouch('btn-left', () => this.movePiece(-1));
+        handleTouch('btn-right', () => this.movePiece(1));
+        handleTouch('btn-down', () => this.dropPiece());
+        handleTouch('btn-rotate', () => this.rotatePiece());
+
+        // Buttons
+        document.getElementById('start-btn').addEventListener('click', () => this.startGame());
+        document.getElementById('restart-btn').addEventListener('click', () => this.startGame());
+    }
+
+    onResize() {
+        this.camera.aspect = window.innerWidth / window.innerHeight;
+        this.camera.updateProjectionMatrix();
+        this.renderer.setSize(window.innerWidth, window.innerHeight);
+    }
+
+    animate(time = 0) {
+        const deltaTime = time - this.lastTime;
+        this.lastTime = time;
+
+        if (!this.paused && !this.gameOver) {
+            this.dropCounter += deltaTime;
+            if (this.dropCounter > this.dropInterval) {
+                this.dropPiece();
+                this.dropCounter = 0;
+            }
+        }
+
+        // Particle Animation
+        for(let i = this.particles.length - 1; i >= 0; i--) {
+            const p = this.particles[i];
+            p.position.add(p.userData.vel);
+            p.scale.multiplyScalar(0.9); // shrink
+            if(p.scale.x < 0.01) {
+                this.scene.remove(p);
+                this.particles.splice(i, 1);
+            }
+        }
+
+        // Background Animation
+        if(this.starMesh) {
+            this.starMesh.rotation.y += 0.0005;
+            this.starMesh.rotation.x += 0.0002;
+        }
+
+        // Slight Camera Sway
+        this.camera.position.x = 5 + Math.sin(time * 0.0005) * 0.5;
+        this.camera.lookAt(5, 10, 0);
+
+        this.renderer.render(this.scene, this.camera);
+        requestAnimationFrame((t) => this.animate(t));
+    }
+}
+
+// Initialize Game
+window.onload = () => {
+    const game = new Tetris3D();
+};
+
+</script>
+</body>
+</html>
