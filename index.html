@@ -2,9 +2,9 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <!-- Viewport設定: ズームを禁止し、固定サイズにする -->
+    <!-- Viewport設定: user-scalable=no を確実にし、viewport-fit=coverで全画面化 -->
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>NEON TETRIS 3D (Mobile Optimized)</title>
+    <title>NEON TETRIS 3D (Mobile Perfect)</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&display=swap" rel="stylesheet">
     <style>
@@ -15,19 +15,23 @@
             --bg-color: #050510;
         }
 
+        /* 全要素に対してブラウザ標準のタッチアクションを禁止（最強のズーム防止策） */
+        * {
+            touch-action: none;
+            -webkit-touch-callout: none; /* iOSでの長押しメニュー禁止 */
+            -webkit-user-select: none; /* テキスト選択禁止 */
+            user-select: none;
+        }
+
         body {
             margin: 0;
-            overflow: hidden; /* スクロールバーを隠す */
+            overflow: hidden;
             background-color: var(--bg-color);
             font-family: 'Orbitron', sans-serif;
             color: white;
-            user-select: none;
-            -webkit-user-select: none;
-            /* 重要: ブラウザの標準タッチ動作（ズーム、パン）を無効化 */
-            touch-action: none;
-            /* 重要: スワイプによる「戻る/進む」やバウンス効果を無効化 */
+            /* スクロールバウンス禁止 */
             overscroll-behavior: none;
-            position: fixed; /* iOSでのスクロールバウンス対策 */
+            position: fixed;
             width: 100%;
             height: 100%;
         }
@@ -130,8 +134,6 @@
             background: rgba(0, 0, 0, 0.5);
             box-shadow: 0 0 10px var(--neon-blue);
             transition: all 0.2s;
-            /* ボタン自体のタッチアクションは許可しないと反応が悪くなる場合があるが、
-               親のbodyでnoneにしているので基本的にはJSで制御する */
         }
 
         .pause-icon:hover {
@@ -231,7 +233,7 @@
             bottom: 20px;
             left: 0;
             width: 100%;
-            height: 180px;
+            height: 220px; /* 少し高さを拡張 */
             z-index: 50;
             pointer-events: none;
             display: flex;
@@ -265,8 +267,7 @@
             backdrop-filter: blur(4px);
             touch-action: manipulation;
             box-shadow: 0 0 10px rgba(0, 255, 255, 0.2);
-            user-select: none;
-            -webkit-tap-highlight-color: transparent; /* タップ時のハイライトを消す */
+            -webkit-tap-highlight-color: transparent;
         }
 
         .c-btn:active {
@@ -317,8 +318,8 @@
     <!-- Touch Controls -->
     <div id="controls">
         <div class="control-group">
-            <!-- 変更: 左ボタンの上にハードドロップボタンを縦並びで配置 -->
-            <div style="display: flex; flex-direction: column; gap: 30px; justify-content: flex-end;">
+            <!-- 変更: 左ボタンの上にハードドロップボタンを縦並びで配置（隙間あり） -->
+            <div style="display: flex; flex-direction: column; gap: 40px; justify-content: flex-end;">
                 <div class="c-btn" id="btn-hard" style="border-color: var(--neon-pink); color: var(--neon-pink); box-shadow: 0 0 10px rgba(255, 0, 255, 0.2);">⤓</div>
                 <div class="c-btn" id="btn-left">←</div>
             </div>
@@ -356,15 +357,44 @@
 
 <script>
 /**
- * MOBILE GESTURE & ZOOM PREVENTION
+ * CRITICAL MOBILE GESTURE & ZOOM PREVENTION
+ * iOS Safariや最新のAndroidブラウザにおける強制ズームを徹底的に阻止する
  */
-(function preventDefaultGestures() {
-    // 1. スクロールとスワイプナビゲーション（戻る/進む）を無効化
-    document.addEventListener('touchmove', function(e) {
-        e.preventDefault();
-    }, { passive: false });
+(function preventAllGestures() {
+    // オプション: パッシブイベントリスナーを無効化して preventDefault を確実に効かせる
+    const nonPassive = { passive: false };
 
-    // 2. ダブルタップによるズームを無効化
+    // 1. ピンチズーム（2本指操作）の開始を阻止
+    document.addEventListener('touchstart', function(e) {
+        if (e.touches.length > 1) {
+            e.preventDefault(); // 2本指以上は即座に無効化
+        }
+    }, nonPassive);
+
+    // 2. ピンチ操作中の動きを阻止
+    document.addEventListener('touchmove', function(e) {
+        if (e.touches.length > 1) {
+            e.preventDefault();
+        }
+        // ここでの preventDefault はスクロール防止も兼ねる（overscroll-behaviorと二重対策）
+        // ただし、もし内部スクロールが必要な箇所ができたら e.target をチェックする必要あり
+        e.preventDefault();
+    }, nonPassive);
+
+    // 3. iOS特有のジェスチャーイベント（ピンチなど）を完全に無効化
+    document.addEventListener('gesturestart', function(e) {
+        e.preventDefault();
+    }, nonPassive);
+
+    document.addEventListener('gesturechange', function(e) {
+        e.preventDefault();
+    }, nonPassive);
+
+    document.addEventListener('gestureend', function(e) {
+        e.preventDefault();
+    }, nonPassive);
+
+    // 4. ダブルタップによるズーム防止
     let lastTouchEnd = 0;
     document.addEventListener('touchend', function(e) {
         const now = (new Date()).getTime();
@@ -374,17 +404,6 @@
         lastTouchEnd = now;
     }, false);
 
-    // 3. 2本指以上のタップ（ピンチズームなど）を無効化
-    document.addEventListener('touchstart', function(e) {
-        if (e.touches.length > 1) {
-            e.preventDefault();
-        }
-    }, { passive: false });
-
-    // 4. ジェスチャーイベント（Safariでのピンチなど）を無効化
-    document.addEventListener('gesturestart', function(e) {
-        e.preventDefault();
-    });
 })();
 
 /**
@@ -947,12 +966,11 @@ class Tetris3D {
             const btn = document.getElementById(id);
             if(!btn) return;
             
-            // Prevent default touch actions (scrolling/zoom)
-            // 'touchstart' で preventDefault するのが最も反応が良いが、
-            // クリック判定を自分でする必要がある。
-            // ここでは単純なタップとして扱う。
+            // 'touchstart' で preventDefault するのが最も反応が良い
             btn.addEventListener('touchstart', (e) => {
-                // e.preventDefault(); // ここで止めるとスクロールは防げるが、クリックも防がれる場合がある
+                e.preventDefault(); // これが重要。ダブルタップ判定やスクロール判定をブラウザにさせない
+                e.stopPropagation();
+
                 if(this.gameOver || this.paused) return;
                 
                 // Vibrate feedback (if supported)
@@ -967,7 +985,7 @@ class Tetris3D {
         handleTouch('btn-right', () => this.movePiece(1));
         handleTouch('btn-down', () => this.dropPiece());
         handleTouch('btn-rotate', () => this.rotatePiece());
-        handleTouch('btn-hard', () => this.hardDrop()); // ハードドロップを追加
+        handleTouch('btn-hard', () => this.hardDrop());
 
         // Buttons
         document.getElementById('start-btn').addEventListener('click', () => this.startGame());
@@ -999,8 +1017,6 @@ class Tetris3D {
         requestAnimationFrame((t) => this.animate(t));
 
         if (this.paused) {
-            // Keep rendering the scene even when paused, so we see the frozen game behind the overlay
-            // But don't update physics or animations that should stop
             this.renderer.render(this.scene, this.camera);
             return;
         }
