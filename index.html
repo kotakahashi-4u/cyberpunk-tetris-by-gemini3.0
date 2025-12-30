@@ -2,8 +2,9 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>NEON TETRIS 3D (Pause Added)</title>
+    <!-- Viewport設定: ズームを禁止し、固定サイズにする -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>NEON TETRIS 3D (Mobile Optimized)</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&display=swap" rel="stylesheet">
     <style>
@@ -16,12 +17,19 @@
 
         body {
             margin: 0;
-            overflow: hidden;
+            overflow: hidden; /* スクロールバーを隠す */
             background-color: var(--bg-color);
             font-family: 'Orbitron', sans-serif;
             color: white;
             user-select: none;
             -webkit-user-select: none;
+            /* 重要: ブラウザの標準タッチ動作（ズーム、パン）を無効化 */
+            touch-action: none;
+            /* 重要: スワイプによる「戻る/進む」やバウンス効果を無効化 */
+            overscroll-behavior: none;
+            position: fixed; /* iOSでのスクロールバウンス対策 */
+            width: 100%;
+            height: 100%;
         }
 
         #canvas-container {
@@ -41,7 +49,7 @@
             width: 100%;
             height: 100%;
             z-index: 10;
-            pointer-events: none; /* Let clicks pass through to controls if needed */
+            pointer-events: none;
             display: flex;
             flex-direction: column;
             justify-content: space-between;
@@ -122,6 +130,8 @@
             background: rgba(0, 0, 0, 0.5);
             box-shadow: 0 0 10px var(--neon-blue);
             transition: all 0.2s;
+            /* ボタン自体のタッチアクションは許可しないと反応が悪くなる場合があるが、
+               親のbodyでnoneにしているので基本的にはJSで制御する */
         }
 
         .pause-icon:hover {
@@ -223,14 +233,13 @@
             width: 100%;
             height: 180px;
             z-index: 50;
-            pointer-events: none; /* Allow clicks to pass through empty areas */
+            pointer-events: none;
             display: flex;
             justify-content: space-between;
             padding: 0 20px;
             box-sizing: border-box;
         }
 
-        /* Show controls on touch devices or small screens, hide on desktop */
         @media (min-width: 1024px) {
             #controls { display: none; }
         }
@@ -257,6 +266,7 @@
             touch-action: manipulation;
             box-shadow: 0 0 10px rgba(0, 255, 255, 0.2);
             user-select: none;
+            -webkit-tap-highlight-color: transparent; /* タップ時のハイライトを消す */
         }
 
         .c-btn:active {
@@ -307,7 +317,12 @@
     <!-- Touch Controls -->
     <div id="controls">
         <div class="control-group">
-            <div class="c-btn" id="btn-left">←</div>
+            <!-- 変更: 左ボタンの上にハードドロップボタンを縦並びで配置 -->
+            <div style="display: flex; flex-direction: column; gap: 30px; justify-content: flex-end;">
+                <div class="c-btn" id="btn-hard" style="border-color: var(--neon-pink); color: var(--neon-pink); box-shadow: 0 0 10px rgba(255, 0, 255, 0.2);">⤓</div>
+                <div class="c-btn" id="btn-left">←</div>
+            </div>
+            
             <div class="c-btn" id="btn-down">↓</div>
             <div class="c-btn" id="btn-right">→</div>
         </div>
@@ -341,8 +356,39 @@
 
 <script>
 /**
+ * MOBILE GESTURE & ZOOM PREVENTION
+ */
+(function preventDefaultGestures() {
+    // 1. スクロールとスワイプナビゲーション（戻る/進む）を無効化
+    document.addEventListener('touchmove', function(e) {
+        e.preventDefault();
+    }, { passive: false });
+
+    // 2. ダブルタップによるズームを無効化
+    let lastTouchEnd = 0;
+    document.addEventListener('touchend', function(e) {
+        const now = (new Date()).getTime();
+        if (now - lastTouchEnd <= 300) {
+            e.preventDefault();
+        }
+        lastTouchEnd = now;
+    }, false);
+
+    // 3. 2本指以上のタップ（ピンチズームなど）を無効化
+    document.addEventListener('touchstart', function(e) {
+        if (e.touches.length > 1) {
+            e.preventDefault();
+        }
+    }, { passive: false });
+
+    // 4. ジェスチャーイベント（Safariでのピンチなど）を無効化
+    document.addEventListener('gesturestart', function(e) {
+        e.preventDefault();
+    });
+})();
+
+/**
  * AUDIO SYSTEM
- * Real-time synthesis using Web Audio API to avoid external asset loading.
  */
 class SoundManager {
     constructor() {
@@ -902,16 +948,18 @@ class Tetris3D {
             if(!btn) return;
             
             // Prevent default touch actions (scrolling/zoom)
+            // 'touchstart' で preventDefault するのが最も反応が良いが、
+            // クリック判定を自分でする必要がある。
+            // ここでは単純なタップとして扱う。
             btn.addEventListener('touchstart', (e) => {
-                e.preventDefault();
+                // e.preventDefault(); // ここで止めるとスクロールは防げるが、クリックも防がれる場合がある
                 if(this.gameOver || this.paused) return;
                 
+                // Vibrate feedback (if supported)
+                if (navigator.vibrate) navigator.vibrate(10);
+
                 action();
                 
-                // Repeat for movement buttons
-                if(id !== 'btn-rotate' && id !== 'btn-hard') {
-                   // Optional: Add hold-to-move logic here if desired
-                }
             }, {passive: false});
         };
 
@@ -919,13 +967,25 @@ class Tetris3D {
         handleTouch('btn-right', () => this.movePiece(1));
         handleTouch('btn-down', () => this.dropPiece());
         handleTouch('btn-rotate', () => this.rotatePiece());
+        handleTouch('btn-hard', () => this.hardDrop()); // ハードドロップを追加
 
         // Buttons
         document.getElementById('start-btn').addEventListener('click', () => this.startGame());
         document.getElementById('restart-btn').addEventListener('click', () => this.startGame());
         
         // Pause Button logic
-        document.getElementById('pause-trigger').addEventListener('click', () => this.togglePause());
+        const pauseBtn = document.getElementById('pause-trigger');
+        pauseBtn.addEventListener('click', (e) => {
+            e.stopPropagation(); // Stop event bubbling
+            this.togglePause();
+        });
+        // Add touchstart for faster response on mobile
+        pauseBtn.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            this.togglePause();
+        }, {passive: false});
+
         document.getElementById('resume-btn').addEventListener('click', () => this.togglePause());
     }
 
