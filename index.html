@@ -2,9 +2,9 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <!-- Viewport設定: user-scalable=no を確実にし、viewport-fit=coverで全画面化 -->
+    <!-- Viewport設定 -->
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>NEON TETRIS 3D (Mobile Perfect)</title>
+    <title>NEON TETRIS 3D (No Zoom)</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&display=swap" rel="stylesheet">
     <style>
@@ -15,12 +15,13 @@
             --bg-color: #050510;
         }
 
-        /* 全要素に対してブラウザ標準のタッチアクションを禁止（最強のズーム防止策） */
+        /* 全要素に対してブラウザ標準のタッチアクションを禁止 */
         * {
             touch-action: none;
-            -webkit-touch-callout: none; /* iOSでの長押しメニュー禁止 */
-            -webkit-user-select: none; /* テキスト選択禁止 */
+            -webkit-touch-callout: none;
+            -webkit-user-select: none;
             user-select: none;
+            -webkit-tap-highlight-color: transparent;
         }
 
         body {
@@ -29,7 +30,6 @@
             background-color: var(--bg-color);
             font-family: 'Orbitron', sans-serif;
             color: white;
-            /* スクロールバウンス禁止 */
             overscroll-behavior: none;
             position: fixed;
             width: 100%;
@@ -136,7 +136,7 @@
             transition: all 0.2s;
         }
 
-        .pause-icon:hover {
+        .pause-icon:active {
             background: var(--neon-blue);
             color: black;
             box-shadow: 0 0 20px var(--neon-blue);
@@ -200,7 +200,7 @@
             overflow: hidden;
         }
 
-        .cyber-btn:hover {
+        .cyber-btn:active, .cyber-btn:hover {
             background: var(--neon-blue);
             color: #000;
             box-shadow: 0 0 30px var(--neon-blue), inset 0 0 20px var(--neon-blue);
@@ -233,7 +233,7 @@
             bottom: 20px;
             left: 0;
             width: 100%;
-            height: 220px; /* 少し高さを拡張 */
+            height: 220px;
             z-index: 50;
             pointer-events: none;
             display: flex;
@@ -265,9 +265,7 @@
             font-size: 24px;
             color: white;
             backdrop-filter: blur(4px);
-            touch-action: manipulation;
             box-shadow: 0 0 10px rgba(0, 255, 255, 0.2);
-            -webkit-tap-highlight-color: transparent;
         }
 
         .c-btn:active {
@@ -318,7 +316,6 @@
     <!-- Touch Controls -->
     <div id="controls">
         <div class="control-group">
-            <!-- 変更: 左ボタンの上にハードドロップボタンを縦並びで配置（隙間あり） -->
             <div style="display: flex; flex-direction: column; gap: 40px; justify-content: flex-end;">
                 <div class="c-btn" id="btn-hard" style="border-color: var(--neon-pink); color: var(--neon-pink); box-shadow: 0 0 10px rgba(255, 0, 255, 0.2);">⤓</div>
                 <div class="c-btn" id="btn-left">←</div>
@@ -357,56 +354,6 @@
 
 <script>
 /**
- * CRITICAL MOBILE GESTURE & ZOOM PREVENTION
- * iOS Safariや最新のAndroidブラウザにおける強制ズームを徹底的に阻止する
- */
-(function preventAllGestures() {
-    // オプション: パッシブイベントリスナーを無効化して preventDefault を確実に効かせる
-    const nonPassive = { passive: false };
-
-    // 1. ピンチズーム（2本指操作）の開始を阻止
-    document.addEventListener('touchstart', function(e) {
-        if (e.touches.length > 1) {
-            e.preventDefault(); // 2本指以上は即座に無効化
-        }
-    }, nonPassive);
-
-    // 2. ピンチ操作中の動きを阻止
-    document.addEventListener('touchmove', function(e) {
-        if (e.touches.length > 1) {
-            e.preventDefault();
-        }
-        // ここでの preventDefault はスクロール防止も兼ねる（overscroll-behaviorと二重対策）
-        // ただし、もし内部スクロールが必要な箇所ができたら e.target をチェックする必要あり
-        e.preventDefault();
-    }, nonPassive);
-
-    // 3. iOS特有のジェスチャーイベント（ピンチなど）を完全に無効化
-    document.addEventListener('gesturestart', function(e) {
-        e.preventDefault();
-    }, nonPassive);
-
-    document.addEventListener('gesturechange', function(e) {
-        e.preventDefault();
-    }, nonPassive);
-
-    document.addEventListener('gestureend', function(e) {
-        e.preventDefault();
-    }, nonPassive);
-
-    // 4. ダブルタップによるズーム防止
-    let lastTouchEnd = 0;
-    document.addEventListener('touchend', function(e) {
-        const now = (new Date()).getTime();
-        if (now - lastTouchEnd <= 300) {
-            e.preventDefault();
-        }
-        lastTouchEnd = now;
-    }, false);
-
-})();
-
-/**
  * AUDIO SYSTEM
  */
 class SoundManager {
@@ -427,7 +374,7 @@ class SoundManager {
         this.startAmbience();
     }
 
-    playOscillator(type, freq, duration, type2 = 'sine') {
+    playOscillator(type, freq, duration) {
         if (!this.initialized) return;
         const osc = this.ctx.createOscillator();
         const gain = this.ctx.createGain();
@@ -445,20 +392,11 @@ class SoundManager {
         osc.stop(this.ctx.currentTime + duration);
     }
 
-    move() {
-        this.playOscillator('triangle', 300, 0.1);
-    }
-
-    rotate() {
-        this.playOscillator('square', 400, 0.15);
-    }
-
-    drop() {
-        this.playOscillator('sawtooth', 150, 0.3);
-    }
+    move() { this.playOscillator('triangle', 300, 0.1); }
+    rotate() { this.playOscillator('square', 400, 0.15); }
+    drop() { this.playOscillator('sawtooth', 150, 0.3); }
 
     clear(lines) {
-        // Chord for clear
         const base = 440 + (lines * 100);
         this.playOscillator('sine', base, 0.5);
         this.playOscillator('triangle', base * 1.5, 0.5);
@@ -483,16 +421,15 @@ class SoundManager {
     }
 
     startAmbience() {
-        // Low drone
         const osc = this.ctx.createOscillator();
         const gain = this.ctx.createGain();
         const lfo = this.ctx.createOscillator();
         
         osc.type = 'sine';
-        osc.frequency.value = 50; // Low bass
+        osc.frequency.value = 50;
         
         lfo.type = 'sine';
-        lfo.frequency.value = 0.1; // Slow modulation
+        lfo.frequency.value = 0.1;
         lfo.connect(gain.gain);
 
         gain.gain.value = 0.1;
@@ -507,32 +444,22 @@ class SoundManager {
  */
 const COLS = 10;
 const ROWS = 20;
-const BLOCK_SIZE = 1;
+const EMISSIVE_INTENSITY = 0.6;
 
-// Tetromino Definitions
 const SHAPES = [
-    [], // Empty for 0 index
-    [[0,0], [1,0], [2,0], [3,0]], // I (Cyan)
-    [[0,0], [1,0], [0,1], [1,1]], // O (Yellow)
-    [[1,0], [0,1], [1,1], [2,1]], // T (Purple)
-    [[1,0], [2,0], [0,1], [1,1]], // S (Green)
-    [[0,0], [1,0], [1,1], [2,1]], // Z (Red)
-    [[0,0], [0,1], [1,1], [2,1]], // J (Blue)
-    [[2,0], [0,1], [1,1], [2,1]]  // L (Orange)
+    [], 
+    [[0,0], [1,0], [2,0], [3,0]], 
+    [[0,0], [1,0], [0,1], [1,1]], 
+    [[1,0], [0,1], [1,1], [2,1]], 
+    [[1,0], [2,0], [0,1], [1,1]], 
+    [[0,0], [1,0], [1,1], [2,1]], 
+    [[0,0], [0,1], [1,1], [2,1]], 
+    [[2,0], [0,1], [1,1], [2,1]]  
 ];
 
 const COLORS = [
-    0x000000,
-    0x00ffff, // I
-    0xffff00, // O
-    0xaa00ff, // T
-    0x00ff00, // S
-    0xff0000, // Z
-    0x0000ff, // J
-    0xffaa00  // L
+    0x000000, 0x00ffff, 0xffff00, 0xaa00ff, 0x00ff00, 0xff0000, 0x0000ff, 0xffaa00
 ];
-
-const EMISSIVE_INTENSITY = 0.6;
 
 class Tetris3D {
     constructor() {
@@ -549,11 +476,9 @@ class Tetris3D {
         this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
         document.getElementById('canvas-container').appendChild(this.renderer.domElement);
 
-        // Lighting
         const ambientLight = new THREE.AmbientLight(0x404040);
         this.scene.add(ambientLight);
 
-        // Cyberpunk Grid Lights
         const light1 = new THREE.PointLight(0x00ffff, 1, 50);
         light1.position.set(0, 20, 10);
         this.scene.add(light1);
@@ -562,7 +487,6 @@ class Tetris3D {
         light2.position.set(10, 0, 10);
         this.scene.add(light2);
 
-        // Game State
         this.grid = Array(ROWS).fill().map(() => Array(COLS).fill(0));
         this.meshGrid = Array(ROWS).fill().map(() => Array(COLS).fill(null));
         
@@ -570,31 +494,26 @@ class Tetris3D {
         this.level = 1;
         this.linesClearedTotal = 0;
         this.gameOver = false;
-        this.paused = true; // Initially paused for Start Screen
-        this.gameStarted = false; // Track if initial start happened
+        this.paused = true; 
+        this.gameStarted = false;
 
         this.currentPiece = null;
         this.nextPieceType = this.randomPieceType();
 
-        // Animation Loop
         this.lastTime = 0;
         this.dropCounter = 0;
         this.dropInterval = 1000;
 
-        // Particle System
         this.particles = [];
 
         this.initEnvironment();
-        this.setupControls();
+        this.setupInput(); // 名前変更: Input全般を管理
         
         window.addEventListener('resize', () => this.onResize());
-        
-        // Start Loop
         this.animate();
     }
 
     initEnvironment() {
-        // The Board Frame
         const frameGeo = new THREE.BoxGeometry(COLS, ROWS, 1);
         const edges = new THREE.EdgesGeometry(frameGeo);
         const lineMat = new THREE.LineBasicMaterial({ color: 0x333333 });
@@ -602,12 +521,10 @@ class Tetris3D {
         frame.position.set(4.5, 9.5, -0.5);
         this.scene.add(frame);
 
-        // Background Grid (Floor/Ceiling illusion)
         const gridHelper = new THREE.GridHelper(100, 50, 0x111111, 0x050520);
         gridHelper.position.y = -5;
         this.scene.add(gridHelper);
 
-        // Moving background stars/data
         const starGeo = new THREE.BufferGeometry();
         const starCount = 500;
         const posArray = new Float32Array(starCount * 3);
@@ -627,7 +544,6 @@ class Tetris3D {
 
     startGame() {
         this.sound.init();
-        // Reset Logic
         this.grid = Array(ROWS).fill().map(() => Array(COLS).fill(0));
         this.score = 0;
         this.level = 1;
@@ -639,7 +555,6 @@ class Tetris3D {
 
         this.updateUI();
 
-        // Clear existing meshes
         for(let y=0; y<ROWS; y++){
             for(let x=0; x<COLS; x++){
                 if(this.meshGrid[y][x]) {
@@ -657,7 +572,6 @@ class Tetris3D {
         document.getElementById('game-over-screen').classList.add('hidden');
         document.getElementById('pause-screen').classList.add('hidden');
         
-        // Reset timing to avoid jump
         this.lastTime = performance.now();
         this.spawnPiece();
     }
@@ -671,7 +585,6 @@ class Tetris3D {
             document.getElementById('pause-screen').classList.remove('hidden');
         } else {
             document.getElementById('pause-screen').classList.add('hidden');
-            // Important: Reset lastTime to prevent delta spike upon resume
             this.lastTime = performance.now(); 
         }
     }
@@ -690,14 +603,13 @@ class Tetris3D {
 
         this.currentPiece = {
             type: type,
-            shape: shape, // Coordinates relative to pivot
+            shape: shape,
             color: color,
             x: 3,
-            y: ROWS - 2, // Start high
+            y: ROWS - 2,
             group: new THREE.Group()
         };
 
-        // Create 3D Meshes for the piece
         shape.forEach(p => {
             const geom = new THREE.BoxGeometry(0.9, 0.9, 0.9);
             const mat = new THREE.MeshStandardMaterial({ 
@@ -715,7 +627,6 @@ class Tetris3D {
         this.updatePieceMeshPosition();
         this.scene.add(this.currentPiece.group);
 
-        // Check immediate collision (Game Over)
         if (this.checkCollision(0, 0, this.currentPiece.shape)) {
             this.handleGameOver();
         }
@@ -726,7 +637,6 @@ class Tetris3D {
         this.currentPiece.group.position.set(this.currentPiece.x, this.currentPiece.y, 0);
     }
 
-    // Logic: 0 = valid, 1 = collision
     checkCollision(offX, offY, shape) {
         for (let p of shape) {
             let newX = this.currentPiece.x + p[0] + offX;
@@ -741,20 +651,16 @@ class Tetris3D {
     rotatePiece() {
         if (!this.currentPiece || this.paused) return;
 
-        // Clone current shape to test rotation
         const currentShape = this.currentPiece.shape;
-        const newShape = currentShape.map(p => [-p[1], p[0]]); // 90 degree rotation
+        const newShape = currentShape.map(p => [-p[1], p[0]]);
 
-        // Wall kick logic (basic)
         let kicks = [0, 1, -1, 2, -2];
-        
         for (let k of kicks) {
             if (!this.checkCollision(k, 0, newShape)) {
                 this.currentPiece.x += k;
                 this.currentPiece.shape = newShape;
                 
-                // Update 3D meshes within the group
-                this.currentPiece.group.clear(); // Remove old meshes
+                this.currentPiece.group.clear();
                 newShape.forEach(p => {
                     const geom = new THREE.BoxGeometry(0.9, 0.9, 0.9);
                     const mat = new THREE.MeshStandardMaterial({ 
@@ -788,7 +694,7 @@ class Tetris3D {
         if (!this.checkCollision(0, -1, this.currentPiece.shape)) {
             this.currentPiece.y--;
             this.updatePieceMeshPosition();
-            this.dropCounter = 0; // Reset auto drop timer
+            this.dropCounter = 0; 
         } else {
             this.lockPiece();
         }
@@ -805,7 +711,6 @@ class Tetris3D {
     }
 
     lockPiece() {
-        // Transfer piece to grid
         const shape = this.currentPiece.shape;
         const cx = this.currentPiece.x;
         const cy = this.currentPiece.y;
@@ -817,7 +722,6 @@ class Tetris3D {
             if (y >= 0 && y < ROWS && x >= 0 && x < COLS) {
                 this.grid[y][x] = this.currentPiece.type;
                 
-                // Create static mesh
                 const geom = new THREE.BoxGeometry(0.9, 0.9, 0.9);
                 const mat = new THREE.MeshStandardMaterial({ 
                     color: color,
@@ -839,7 +743,6 @@ class Tetris3D {
     }
 
     spawnExplosion(y) {
-        // Simple particle explosion for line clear
         const geo = new THREE.BoxGeometry(0.2, 0.2, 0.2);
         const mat = new THREE.MeshBasicMaterial({ color: 0xffffff });
         
@@ -847,7 +750,6 @@ class Tetris3D {
             const mesh = new THREE.Mesh(geo, mat);
             mesh.position.set(Math.random() * COLS, y, (Math.random()-0.5) * 2);
             
-            // Velocity
             mesh.userData.vel = new THREE.Vector3(
                 (Math.random()-0.5) * 0.5,
                 (Math.random()-0.5) * 0.5,
@@ -872,13 +774,11 @@ class Tetris3D {
             }
 
             if (full) {
-                // Remove visuals
                 for(let x=0; x<COLS; x++) {
                     this.scene.remove(this.meshGrid[y][x]);
                     this.meshGrid[y][x] = null;
                 }
                 
-                // Shift data down
                 for (let yy = y; yy < ROWS - 1; yy++) {
                     for (let x = 0; x < COLS; x++) {
                         this.grid[yy][x] = this.grid[yy+1][x];
@@ -889,7 +789,6 @@ class Tetris3D {
                     }
                 }
                 
-                // Clear top row
                 for(let x=0; x<COLS; x++) {
                     this.grid[ROWS-1][x] = 0;
                     this.meshGrid[ROWS-1][x] = null;
@@ -897,15 +796,14 @@ class Tetris3D {
 
                 this.spawnExplosion(y);
 
-                y++; // Check same row index again since we pulled down
+                y++; 
                 linesCleared++;
             }
         }
 
         if (linesCleared > 0) {
             this.sound.clear(linesCleared);
-            // Scoring
-            const points = [0, 100, 300, 500, 800]; // 1, 2, 3, 4 lines
+            const points = [0, 100, 300, 500, 800];
             this.score += points[linesCleared] * this.level;
             
             this.linesClearedTotal += linesCleared;
@@ -915,7 +813,6 @@ class Tetris3D {
             }
             this.updateUI();
             
-            // Screen shake effect logic could go here
             this.camera.position.z -= 0.5;
             setTimeout(() => this.camera.position.z += 0.5, 50);
         }
@@ -927,7 +824,7 @@ class Tetris3D {
         this.sound.gameOver();
         document.getElementById('final-score').innerText = this.score;
         document.getElementById('game-over-screen').classList.remove('hidden');
-        document.getElementById('pause-screen').classList.add('hidden'); // Ensure pause screen is gone
+        document.getElementById('pause-screen').classList.add('hidden');
     }
 
     updateUI() {
@@ -936,20 +833,21 @@ class Tetris3D {
     }
 
     updateNextPieceUI() {
-        // Text representation of next piece
         const names = ['?', 'I', 'O', 'T', 'S', 'Z', 'J', 'L'];
         document.getElementById('next-piece-display').innerText = names[this.nextPieceType];
         document.getElementById('next-piece-display').style.color = '#' + COLORS[this.nextPieceType].toString(16).padStart(6, '0');
     }
 
-    setupControls() {
+    /**
+     * 強力なタッチ制御設定
+     */
+    setupInput() {
+        // キーボード操作
         document.addEventListener('keydown', (e) => {
-            // Global keys
             if (e.code === 'KeyP' || e.code === 'Escape') {
                 this.togglePause();
                 return;
             }
-
             if(this.gameOver || this.paused) return;
 
             switch(e.code) {
@@ -961,50 +859,97 @@ class Tetris3D {
             }
         });
 
-        // Touch Controls
-        const handleTouch = (id, action) => {
+        // ============================================
+        // 究極のズーム防止: ホワイトリスト方式タッチ制御
+        // ============================================
+        
+        // 1. 全画面のタッチを監視し、ボタン以外はすべて無効化する
+        //    passive: false が必須。これでブラウザのデフォルト挙動を止められる。
+        document.addEventListener('touchstart', (e) => {
+            // マルチタッチは問答無用でブロック
+            if (e.touches.length > 1) {
+                e.preventDefault();
+                return;
+            }
+
+            const target = e.target;
+            // タッチされた要素が「許可されたボタン」かその子要素かチェック
+            const isButton = target.closest('.c-btn') || 
+                             target.closest('.cyber-btn') || 
+                             target.closest('.pause-icon');
+
+            if (!isButton) {
+                // ボタン以外（背景など）を触った場合は、ズームやスクロールを含め一切の動作を禁止
+                e.preventDefault();
+            }
+            // ボタンの場合はここでは preventDefault しない（後続の処理に任せる）
+        }, { passive: false });
+
+        // 2. touchmove は全画面で禁止（スクロール防止）
+        document.addEventListener('touchmove', (e) => {
+            e.preventDefault();
+        }, { passive: false });
+
+        // 3. touchend も、ボタン以外は無効化（念のため）
+        document.addEventListener('touchend', (e) => {
+             const target = e.target;
+             const isButton = target.closest('.c-btn') || 
+                              target.closest('.cyber-btn') || 
+                              target.closest('.pause-icon');
+             if (!isButton) {
+                 e.preventDefault();
+             }
+        }, { passive: false });
+
+        // 4. iOS特有のジェスチャーイベント完全禁止
+        const prevent = (e) => e.preventDefault();
+        document.addEventListener('gesturestart', prevent);
+        document.addEventListener('gesturechange', prevent);
+        document.addEventListener('gestureend', prevent);
+
+        // ============================================
+        // ボタンごとのアクション設定
+        // ============================================
+        
+        // ヘルパー: ボタンにアクションを紐付け（touchstartで即実行＆イベント停止）
+        const attachTouch = (id, action) => {
             const btn = document.getElementById(id);
             if(!btn) return;
             
-            // 'touchstart' で preventDefault するのが最も反応が良い
-            btn.addEventListener('touchstart', (e) => {
-                e.preventDefault(); // これが重要。ダブルタップ判定やスクロール判定をブラウザにさせない
+            const handler = (e) => {
+                // ここで preventDefault することで、ボタン上でのダブルタップ拡大判定も防ぐ
+                // また、clickイベントも発生しなくなる（touchstartだけで完結させる）
+                e.preventDefault(); 
                 e.stopPropagation();
 
-                if(this.gameOver || this.paused) return;
-                
-                // Vibrate feedback (if supported)
                 if (navigator.vibrate) navigator.vibrate(10);
-
                 action();
-                
-            }, {passive: false});
+            };
+
+            // touchstartで反応させる（レスポンス向上＆ズーム防止の要）
+            btn.addEventListener('touchstart', handler, { passive: false });
+            
+            // PCのマウス操作用にも click を残すが、タッチデバイスでは touchstart が先に発火して
+            // preventDefault されるため、click は発火しない（二重実行防止になる）
+            btn.addEventListener('click', (e) => {
+                // タッチデバイス以外でのクリック用
+                action();
+            });
         };
 
-        handleTouch('btn-left', () => this.movePiece(-1));
-        handleTouch('btn-right', () => this.movePiece(1));
-        handleTouch('btn-down', () => this.dropPiece());
-        handleTouch('btn-rotate', () => this.rotatePiece());
-        handleTouch('btn-hard', () => this.hardDrop());
+        // コントローラー
+        attachTouch('btn-left', () => { if(!this.paused && !this.gameOver) this.movePiece(-1); });
+        attachTouch('btn-right', () => { if(!this.paused && !this.gameOver) this.movePiece(1); });
+        attachTouch('btn-down', () => { if(!this.paused && !this.gameOver) this.dropPiece(); });
+        attachTouch('btn-rotate', () => { if(!this.paused && !this.gameOver) this.rotatePiece(); });
+        attachTouch('btn-hard', () => { if(!this.paused && !this.gameOver) this.hardDrop(); });
 
-        // Buttons
-        document.getElementById('start-btn').addEventListener('click', () => this.startGame());
-        document.getElementById('restart-btn').addEventListener('click', () => this.startGame());
-        
-        // Pause Button logic
-        const pauseBtn = document.getElementById('pause-trigger');
-        pauseBtn.addEventListener('click', (e) => {
-            e.stopPropagation(); // Stop event bubbling
-            this.togglePause();
-        });
-        // Add touchstart for faster response on mobile
-        pauseBtn.addEventListener('touchstart', (e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            this.togglePause();
-        }, {passive: false});
-
-        document.getElementById('resume-btn').addEventListener('click', () => this.togglePause());
+        // UIボタン (ポーズ、スタート、リスタート)
+        // これらも touchstart で処理しないと、ここを連打したときにズームする恐れがある
+        attachTouch('pause-trigger', () => this.togglePause());
+        attachTouch('start-btn', () => this.startGame());
+        attachTouch('restart-btn', () => this.startGame());
+        attachTouch('resume-btn', () => this.togglePause());
     }
 
     onResize() {
@@ -1032,24 +977,21 @@ class Tetris3D {
             }
         }
 
-        // Particle Animation
         for(let i = this.particles.length - 1; i >= 0; i--) {
             const p = this.particles[i];
             p.position.add(p.userData.vel);
-            p.scale.multiplyScalar(0.9); // shrink
+            p.scale.multiplyScalar(0.9); 
             if(p.scale.x < 0.01) {
                 this.scene.remove(p);
                 this.particles.splice(i, 1);
             }
         }
 
-        // Background Animation
         if(this.starMesh) {
             this.starMesh.rotation.y += 0.0005;
             this.starMesh.rotation.x += 0.0002;
         }
 
-        // Slight Camera Sway
         this.camera.position.x = 5 + Math.sin(time * 0.0005) * 0.5;
         this.camera.lookAt(5, 10, 0);
 
@@ -1057,7 +999,6 @@ class Tetris3D {
     }
 }
 
-// Initialize Game
 window.onload = () => {
     const game = new Tetris3D();
 };
