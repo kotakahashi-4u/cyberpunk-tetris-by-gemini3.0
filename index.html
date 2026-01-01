@@ -128,21 +128,30 @@
                 left: 0;
                 padding: 10px 15px; /* 左上隅に寄せる */
                 background: linear-gradient(to right, rgba(0,0,0,0.5), transparent); /* 視認性確保 */
+                
+                /* Gridレイアウトに変更して整理 */
+                display: grid;
+                grid-template-columns: auto auto; /* ラベルと値の2列 */
+                column-gap: 15px; /* ラベルと値の間隔 */
+                align-items: baseline;
             }
             
             .score-box h1 {
                 font-size: 1.2rem;
                 margin-bottom: 2px;
+                grid-column: 1 / -1; /* タイトルは全幅を使う */
             }
             
-            .score-box .label, .score-box .value {
+            .score-box .label {
                 font-size: 0.8rem;
-                display: inline-block;
-                margin-right: 5px;
+                margin: 0;
+                /* 右マージンなどは不要、Gridのgapで制御 */
             }
+            
             .score-box .value {
                 font-size: 1rem;
                 font-weight: bold;
+                margin: 0;
             }
 
             .next-box {
@@ -743,7 +752,7 @@ class Tetris3D {
         // カメラ位置を左にずらすことで、相対的にオブジェクトを右寄りに見せる
         if(isMobile) {
             // ここでXを-4.0にして、さらに右寄りに見えるようにする
-            this.nextCamera.position.set(-4.0, 0, 7.5);
+            this.nextCamera.position.set(-4.0, -1.0, 7.5);
         } else {
             this.nextCamera.position.set(0, 0, 14);
         }
