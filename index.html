@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <!-- Viewport設定 -->
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>NEON TETRIS 3D (No Zoom)</title>
+    <title>NEON TETRIS 3D (Final)</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&display=swap" rel="stylesheet">
     <style>
@@ -101,13 +101,68 @@
             top: 20px;
             left: 20px;
             text-align: left;
+            transition: all 0.3s ease;
         }
 
         .next-box {
             position: absolute;
             top: 20px;
-            right: 20px;
+            right: 10px; /* PCデフォルト */
             text-align: right;
+            width: 80px; /* PCデフォルト */
+            transition: all 0.3s ease;
+        }
+
+        /* NEXT表示用のコンテナ */
+        #next-piece-display {
+            width: 100%;
+            height: 180px; /* PCデフォルト */
+            margin-top: 5px;
+            transition: all 0.3s ease;
+        }
+
+        /* モバイルレイアウト調整 */
+        @media (max-width: 600px) {
+            .score-box {
+                top: 0;
+                left: 0;
+                padding: 10px 15px; /* 左上隅に寄せる */
+                background: linear-gradient(to right, rgba(0,0,0,0.5), transparent); /* 視認性確保 */
+            }
+            
+            .score-box h1 {
+                font-size: 1.2rem;
+                margin-bottom: 2px;
+            }
+            
+            .score-box .label, .score-box .value {
+                font-size: 0.8rem;
+                display: inline-block;
+                margin-right: 5px;
+            }
+            .score-box .value {
+                font-size: 1rem;
+                font-weight: bold;
+            }
+
+            .next-box {
+                top: 0;
+                right: 0;
+                width: 320px; /* 幅をさらに広げて3つ並べるスペースを確保 */
+                padding: 5px 10px;
+                background: linear-gradient(to left, rgba(0,0,0,0.5), transparent);
+            }
+            
+            .next-box .label {
+                font-size: 0.8rem;
+                margin-bottom: 0;
+                margin-right: 10px; 
+            }
+
+            #next-piece-display {
+                height: 120px; /* 高さを大幅に増やしてブロックを大きく見せる */
+                margin-top: 0;
+            }
         }
 
         /* Pause Button Styling */
@@ -118,6 +173,12 @@
             transform: translateX(-50%);
             pointer-events: auto;
             z-index: 100;
+        }
+
+        @media (max-width: 600px) {
+            .pause-btn-container {
+                top: 10px; /* モバイルでは少し上げる */
+            }
         }
 
         .pause-icon {
@@ -309,7 +370,8 @@
 
         <div class="next-box hud-panel">
             <div class="label">NEXT</div>
-            <div class="value" id="next-piece-display"></div>
+            <!-- ここに3Dで表示する -->
+            <div id="next-piece-display"></div>
         </div>
     </div>
 
@@ -448,13 +510,13 @@ const EMISSIVE_INTENSITY = 0.6;
 
 const SHAPES = [
     [], 
-    [[0,0], [1,0], [2,0], [3,0]], 
-    [[0,0], [1,0], [0,1], [1,1]], 
-    [[1,0], [0,1], [1,1], [2,1]], 
-    [[1,0], [2,0], [0,1], [1,1]], 
-    [[0,0], [1,0], [1,1], [2,1]], 
-    [[0,0], [0,1], [1,1], [2,1]], 
-    [[2,0], [0,1], [1,1], [2,1]]  
+    [[0,0], [1,0], [2,0], [3,0]], // I
+    [[0,0], [1,0], [0,1], [1,1]], // O
+    [[1,0], [0,1], [1,1], [2,1]], // T
+    [[1,0], [2,0], [0,1], [1,1]], // S
+    [[0,0], [1,0], [1,1], [2,1]], // Z
+    [[0,0], [0,1], [1,1], [2,1]], // J
+    [[2,0], [0,1], [1,1], [2,1]]  // L
 ];
 
 const COLORS = [
@@ -468,8 +530,9 @@ class Tetris3D {
         this.scene.fog = new THREE.FogExp2(0x050510, 0.02);
 
         this.camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
-        this.camera.position.set(5, 10, 25);
-        this.camera.lookAt(5, 10, 0);
+        // カメラの初期位置をボードの中心軸(X=4.5)に合わせる
+        this.camera.position.set(4.5, 10, 25);
+        this.camera.lookAt(4.5, 10, 0);
 
         this.renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
         this.renderer.setSize(window.innerWidth, window.innerHeight);
@@ -498,7 +561,13 @@ class Tetris3D {
         this.gameStarted = false;
 
         this.currentPiece = null;
-        this.nextPieceType = this.randomPieceType();
+        
+        // Next Pieces Queue (3手先まで)
+        this.nextQueue = [];
+        this.initNextRenderer();
+        for(let i=0; i<3; i++) {
+            this.nextQueue.push(this.randomPieceType());
+        }
 
         this.lastTime = 0;
         this.dropCounter = 0;
@@ -507,16 +576,45 @@ class Tetris3D {
         this.particles = [];
 
         this.initEnvironment();
-        this.setupInput(); // 名前変更: Input全般を管理
+        this.setupInput(); 
         
-        window.addEventListener('resize', () => this.onResize());
+        // 初期サイズ合わせ
+        this.onResize();
         this.animate();
+    }
+
+    initNextRenderer() {
+        // NEXT表示用の小型レンダラーを初期化
+        const container = document.getElementById('next-piece-display');
+        const width = container.clientWidth;
+        const height = container.clientHeight; // CSSで高さを指定済み
+
+        this.nextScene = new THREE.Scene();
+        // ライトはメインと同じような雰囲気に
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
+        this.nextScene.add(ambientLight);
+        const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
+        dirLight.position.set(5, 10, 10);
+        this.nextScene.add(dirLight);
+
+        // 3つ縦に並べるので画角や位置を調整
+        this.nextCamera = new THREE.PerspectiveCamera(50, width / height, 0.1, 100);
+        this.nextCamera.position.set(0, 0, 14);
+
+        this.nextRenderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+        this.nextRenderer.setSize(width, height);
+        this.nextRenderer.setPixelRatio(window.devicePixelRatio);
+        container.appendChild(this.nextRenderer.domElement);
+        
+        this.nextGroup = new THREE.Group();
+        this.nextScene.add(this.nextGroup);
     }
 
     initEnvironment() {
         const frameGeo = new THREE.BoxGeometry(COLS, ROWS, 1);
         const edges = new THREE.EdgesGeometry(frameGeo);
-        const lineMat = new THREE.LineBasicMaterial({ color: 0x333333 });
+        // 変更: 枠線の色を明るいシアンブルーに変更して視認性を向上
+        const lineMat = new THREE.LineBasicMaterial({ color: 0x006699 }); 
         const frame = new THREE.LineSegments(edges, lineMat);
         frame.position.set(4.5, 9.5, -0.5);
         this.scene.add(frame);
@@ -594,8 +692,11 @@ class Tetris3D {
     }
 
     spawnPiece() {
-        const type = this.nextPieceType;
-        this.nextPieceType = this.randomPieceType();
+        // Queueから取り出す
+        const type = this.nextQueue.shift();
+        // 新しいピースを補充
+        this.nextQueue.push(this.randomPieceType());
+        
         this.updateNextPieceUI();
 
         const shape = SHAPES[type];
@@ -629,6 +730,76 @@ class Tetris3D {
 
         if (this.checkCollision(0, 0, this.currentPiece.shape)) {
             this.handleGameOver();
+        }
+    }
+
+    updateNextPieceUI() {
+        if (!this.nextGroup) return;
+        this.nextGroup.clear();
+
+        const isMobile = window.innerWidth <= 600;
+
+        // モバイルならカメラをぐっと近づけて大きく見せる
+        // カメラ位置を左にずらすことで、相対的にオブジェクトを右寄りに見せる
+        if(isMobile) {
+            // ここでXを-4.0にして、さらに右寄りに見えるようにする
+            this.nextCamera.position.set(-4.0, 0, 7.5);
+        } else {
+            this.nextCamera.position.set(0, 0, 14);
+        }
+
+        // 固定の角度をつけて静止させる（揺れ防止）
+        this.nextGroup.rotation.set(0.2, 0.2, 0);
+
+        // Queueにある3つのピースを表示
+        this.nextQueue.forEach((type, index) => {
+            const shape = SHAPES[type];
+            const color = COLORS[type];
+            const pieceGroup = new THREE.Group();
+
+            shape.forEach(p => {
+                const geom = new THREE.BoxGeometry(0.8, 0.8, 0.8);
+                const mat = new THREE.MeshStandardMaterial({
+                    color: color,
+                    emissive: color,
+                    emissiveIntensity: 0.5
+                });
+                const mesh = new THREE.Mesh(geom, mat);
+                mesh.position.set(p[0], p[1], 0);
+                pieceGroup.add(mesh);
+            });
+
+            // 位置調整 
+            const offset = this.getCenterOffset(type);
+
+            if (isMobile) {
+                // 横並び: 左(Next) -> 右
+                // カメラがさらに近くなった分、間隔を調整
+                // 画面からはみ出さないギリギリを攻める
+                const xPos = -4.2 + (index * 4.2); 
+                pieceGroup.position.set(xPos - offset.x, -offset.y, 0);
+            } else {
+                // 縦並び (PC)
+                const yPos = 2.5 - (index * 2.5);
+                pieceGroup.position.set(-offset.x, yPos - offset.y, 0);
+            }
+            
+            this.nextGroup.add(pieceGroup);
+        });
+    }
+
+    // ピースの中心位置を補正するためのオフセット
+    getCenterOffset(type) {
+        switch(type) {
+            case 1: return {x: 1.5, y: 0.0}; // I
+            case 2: return {x: 0.5, y: 0.5}; // O
+            case 3: // T
+            case 4: // S
+            case 5: // Z
+            case 6: // J
+            case 7: // L
+                return {x: 1.0, y: 0.5}; 
+            default: return {x: 0, y: 0};
         }
     }
 
@@ -832,15 +1003,6 @@ class Tetris3D {
         document.getElementById('level').innerText = this.level;
     }
 
-    updateNextPieceUI() {
-        const names = ['?', 'I', 'O', 'T', 'S', 'Z', 'J', 'L'];
-        document.getElementById('next-piece-display').innerText = names[this.nextPieceType];
-        document.getElementById('next-piece-display').style.color = '#' + COLORS[this.nextPieceType].toString(16).padStart(6, '0');
-    }
-
-    /**
-     * 強力なタッチ制御設定
-     */
     setupInput() {
         // キーボード操作
         document.addEventListener('keydown', (e) => {
@@ -859,38 +1021,26 @@ class Tetris3D {
             }
         });
 
-        // ============================================
         // 究極のズーム防止: ホワイトリスト方式タッチ制御
-        // ============================================
-        
-        // 1. 全画面のタッチを監視し、ボタン以外はすべて無効化する
-        //    passive: false が必須。これでブラウザのデフォルト挙動を止められる。
         document.addEventListener('touchstart', (e) => {
-            // マルチタッチは問答無用でブロック
             if (e.touches.length > 1) {
                 e.preventDefault();
                 return;
             }
-
             const target = e.target;
-            // タッチされた要素が「許可されたボタン」かその子要素かチェック
             const isButton = target.closest('.c-btn') || 
                              target.closest('.cyber-btn') || 
                              target.closest('.pause-icon');
 
             if (!isButton) {
-                // ボタン以外（背景など）を触った場合は、ズームやスクロールを含め一切の動作を禁止
                 e.preventDefault();
             }
-            // ボタンの場合はここでは preventDefault しない（後続の処理に任せる）
         }, { passive: false });
 
-        // 2. touchmove は全画面で禁止（スクロール防止）
         document.addEventListener('touchmove', (e) => {
             e.preventDefault();
         }, { passive: false });
 
-        // 3. touchend も、ボタン以外は無効化（念のため）
         document.addEventListener('touchend', (e) => {
              const target = e.target;
              const isButton = target.closest('.c-btn') || 
@@ -901,51 +1051,31 @@ class Tetris3D {
              }
         }, { passive: false });
 
-        // 4. iOS特有のジェスチャーイベント完全禁止
         const prevent = (e) => e.preventDefault();
         document.addEventListener('gesturestart', prevent);
         document.addEventListener('gesturechange', prevent);
         document.addEventListener('gestureend', prevent);
 
-        // ============================================
-        // ボタンごとのアクション設定
-        // ============================================
-        
-        // ヘルパー: ボタンにアクションを紐付け（touchstartで即実行＆イベント停止）
         const attachTouch = (id, action) => {
             const btn = document.getElementById(id);
             if(!btn) return;
             
             const handler = (e) => {
-                // ここで preventDefault することで、ボタン上でのダブルタップ拡大判定も防ぐ
-                // また、clickイベントも発生しなくなる（touchstartだけで完結させる）
                 e.preventDefault(); 
                 e.stopPropagation();
-
                 if (navigator.vibrate) navigator.vibrate(10);
                 action();
             };
-
-            // touchstartで反応させる（レスポンス向上＆ズーム防止の要）
             btn.addEventListener('touchstart', handler, { passive: false });
-            
-            // PCのマウス操作用にも click を残すが、タッチデバイスでは touchstart が先に発火して
-            // preventDefault されるため、click は発火しない（二重実行防止になる）
-            btn.addEventListener('click', (e) => {
-                // タッチデバイス以外でのクリック用
-                action();
-            });
+            btn.addEventListener('click', (e) => action());
         };
 
-        // コントローラー
         attachTouch('btn-left', () => { if(!this.paused && !this.gameOver) this.movePiece(-1); });
         attachTouch('btn-right', () => { if(!this.paused && !this.gameOver) this.movePiece(1); });
         attachTouch('btn-down', () => { if(!this.paused && !this.gameOver) this.dropPiece(); });
         attachTouch('btn-rotate', () => { if(!this.paused && !this.gameOver) this.rotatePiece(); });
         attachTouch('btn-hard', () => { if(!this.paused && !this.gameOver) this.hardDrop(); });
 
-        // UIボタン (ポーズ、スタート、リスタート)
-        // これらも touchstart で処理しないと、ここを連打したときにズームする恐れがある
         attachTouch('pause-trigger', () => this.togglePause());
         attachTouch('start-btn', () => this.startGame());
         attachTouch('restart-btn', () => this.startGame());
@@ -953,13 +1083,55 @@ class Tetris3D {
     }
 
     onResize() {
-        this.camera.aspect = window.innerWidth / window.innerHeight;
+        const width = window.innerWidth;
+        const height = window.innerHeight;
+        const aspect = width / height;
+
+        // メインレンダラー
+        this.camera.aspect = aspect;
         this.camera.updateProjectionMatrix();
-        this.renderer.setSize(window.innerWidth, window.innerHeight);
+        this.renderer.setSize(width, height);
+
+        // 画面サイズに応じてカメラ距離を調整（ズームフィット）
+        // モバイル（縦長）の場合、横幅基準で距離を決めることで「横いっぱい」にする
+        if (width <= 600) {
+            // 縦長の場合、横幅が収まるように距離を離す（あるいは近づける）計算
+            // ボードの幅は約10ユニット。FOV=60度。
+            // 必要な距離 = (幅/2) / tan(FOV/2) * (1/aspect) みたいな計算になるが、
+            // 簡易的に調整値を設定する。
+            // アスペクト比が小さい（縦長）ほど、Zを大きくしないと横が見切れる
+            // しかし「横いっぱいにしたい」＝余白を削りたいので、Zを適切に設定する。
+            
+            // 基準: アスペクト比0.5 (9:18) くらいで Z=35 くらいだと全体が入る
+            // これをアスペクト比に応じて可変にする
+            // 修正: より大きく表示するために係数を15から11.5に変更
+            this.camera.position.z = 11.5 / aspect; // アスペクト比が小さいほど遠くなる
+        } else {
+            this.camera.position.z = 25; // PCデフォルト
+        }
+
+        // NEXTレンダラー
+        if (this.nextRenderer) {
+            const container = document.getElementById('next-piece-display');
+            this.nextCamera.aspect = container.clientWidth / container.clientHeight;
+            this.nextCamera.updateProjectionMatrix();
+            this.nextRenderer.setSize(container.clientWidth, container.clientHeight);
+
+            this.updateNextPieceUI();
+        }
     }
 
     animate(time = 0) {
         requestAnimationFrame((t) => this.animate(t));
+
+        // NEXT表示の回転アニメーションを削除（静止させる）
+        // if (this.nextGroup) {
+        //      this.nextGroup.rotation.y = Math.sin(time * 0.0005) * 0.2;
+        //      this.nextGroup.rotation.x = Math.sin(time * 0.0003) * 0.1;
+        // }
+        if (this.nextRenderer && this.nextScene && this.nextCamera) {
+             this.nextRenderer.render(this.nextScene, this.nextCamera);
+        }
 
         if (this.paused) {
             this.renderer.render(this.scene, this.camera);
@@ -992,8 +1164,9 @@ class Tetris3D {
             this.starMesh.rotation.x += 0.0002;
         }
 
-        this.camera.position.x = 5 + Math.sin(time * 0.0005) * 0.5;
-        this.camera.lookAt(5, 10, 0);
+        // カメラの中心座標を4.5に固定し、揺らぎを加える
+        this.camera.position.x = 4.5 + Math.sin(time * 0.0005) * 0.5;
+        this.camera.lookAt(4.5, 10, 0);
 
         this.renderer.render(this.scene, this.camera);
     }
