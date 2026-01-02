@@ -357,13 +357,13 @@
         @media (max-width: 600px) {
             /* 修正: 少し小さくして圧迫感を減らす */
             .c-btn {
-                width: 55px;
-                height: 55px;
-                font-size: 20px;
+                width: 45px;
+                height: 45px;
+                font-size: 18px;
             }
             .c-btn.big {
-                width: 70px;
-                height: 70px;
+                width: 60px;
+                height: 60px;
             }
             .control-group {
                 gap: 10px; /* ギャップも少し詰める */
@@ -1131,7 +1131,7 @@ class Tetris3D {
             // これをアスペクト比に応じて可変にする
             // 修正: 縮小して全体を表示するため、係数を大きくする (11.5 -> 18.5程度)
             // これでボード全体が大きくなり、画面内に収まる
-            this.camera.position.z = 12.5 / aspect; 
+            this.camera.position.z = 13.0 / aspect; 
             
             // 修正: 画面下部に余白を作るため、カメラの注視点を下に下げる（8.5）
             // これにより、Y=10（ボード中心）は画面中心より上に来る
