@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <!-- Viewport設定 -->
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>NEON TETRIS 3D (Final)</title>
+    <title>NEON TETRIS 3D (Final Fixed v3)</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&display=swap" rel="stylesheet">
     <style>
@@ -129,7 +129,7 @@
                 padding: 10px 15px; /* 左上隅に寄せる */
                 background: linear-gradient(to right, rgba(0,0,0,0.5), transparent); /* 視認性確保 */
                 
-                /* Gridレイアウトに変更して整理 */
+                /* 縦並びGrid */
                 display: grid;
                 grid-template-columns: auto auto; /* ラベルと値の2列 */
                 column-gap: 15px; /* ラベルと値の間隔 */
@@ -145,7 +145,6 @@
             .score-box .label {
                 font-size: 0.8rem;
                 margin: 0;
-                /* 右マージンなどは不要、Gridのgapで制御 */
             }
             
             .score-box .value {
@@ -352,6 +351,23 @@
         
         .c-btn.big:active {
             background: var(--neon-pink);
+        }
+
+        /* モバイル向けボタンサイズ調整 */
+        @media (max-width: 600px) {
+            /* 修正: 少し小さくして圧迫感を減らす */
+            .c-btn {
+                width: 55px;
+                height: 55px;
+                font-size: 20px;
+            }
+            .c-btn.big {
+                width: 70px;
+                height: 70px;
+            }
+            .control-group {
+                gap: 10px; /* ギャップも少し詰める */
+            }
         }
 
     </style>
@@ -752,7 +768,7 @@ class Tetris3D {
         // カメラ位置を左にずらすことで、相対的にオブジェクトを右寄りに見せる
         if(isMobile) {
             // ここでXを-4.0にして、さらに右寄りに見えるようにする
-            this.nextCamera.position.set(-4.0, -1.0, 7.5);
+            this.nextCamera.position.set(-6.0, -1.5, 7.5);
         } else {
             this.nextCamera.position.set(0, 0, 14);
         }
@@ -1113,10 +1129,19 @@ class Tetris3D {
             
             // 基準: アスペクト比0.5 (9:18) くらいで Z=35 くらいだと全体が入る
             // これをアスペクト比に応じて可変にする
-            // 修正: より大きく表示するために係数を15から11.5に変更
-            this.camera.position.z = 11.5 / aspect; // アスペクト比が小さいほど遠くなる
+            // 修正: 縮小して全体を表示するため、係数を大きくする (11.5 -> 18.5程度)
+            // これでボード全体が大きくなり、画面内に収まる
+            this.camera.position.z = 12.8 / aspect; 
+            
+            // 修正: 画面下部に余白を作るため、カメラの注視点を下に下げる（8.5）
+            // これにより、Y=10（ボード中心）は画面中心より上に来る
+            // ★重要：カメラ位置のYも8.5に合わせることで「真正面」視点にする
+            this.camera.position.y = 8.5; 
+            this.camera.lookAt(4.5, 9.5, 0);
         } else {
             this.camera.position.z = 25; // PCデフォルト
+            this.camera.position.y = 10;
+            this.camera.lookAt(4.5, 10, 0);
         }
 
         // NEXTレンダラー
@@ -1175,7 +1200,15 @@ class Tetris3D {
 
         // カメラの中心座標を4.5に固定し、揺らぎを加える
         this.camera.position.x = 4.5 + Math.sin(time * 0.0005) * 0.5;
-        this.camera.lookAt(4.5, 10, 0);
+        
+        // 修正: animateループ内でもY=8.5を維持する
+        if (window.innerWidth <= 600) {
+             // カメラ位置は onResize で設定した Y=8.5 を基準にするため、ここではYを上書きしない
+             // もし揺らぎを入れるなら Y = 8.5 + sin... とする
+             this.camera.lookAt(4.5, 9.5, 0); 
+        } else {
+             this.camera.lookAt(4.5, 10, 0);
+        }
 
         this.renderer.render(this.scene, this.camera);
     }
