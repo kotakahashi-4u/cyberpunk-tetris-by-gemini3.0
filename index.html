@@ -275,6 +275,29 @@
             box-shadow: 0 0 30px var(--neon-blue), inset 0 0 20px var(--neon-blue);
         }
 
+        /* Mode Selector Styles */
+        .mode-selector {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 30px;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+
+        .mode-btn {
+            padding: 10px 15px;
+            font-size: 0.9rem;
+            margin-top: 0;
+            opacity: 0.4;
+            transition: all 0.3s;
+        }
+
+        .mode-btn.active {
+            opacity: 1;
+            background: rgba(0, 255, 255, 0.15);
+            box-shadow: 0 0 20px var(--neon-blue), inset 0 0 10px var(--neon-blue);
+        }
+
         .glitch-text {
             font-size: 4rem;
             font-weight: 900;
@@ -355,7 +378,6 @@
 
         /* モバイル向けボタンサイズ調整 */
         @media (max-width: 600px) {
-            /* 修正: 少し小さくして圧迫感を減らす */
             .c-btn {
                 width: 45px;
                 height: 45px;
@@ -418,9 +440,18 @@
 
     <div id="start-screen">
         <div class="glitch-text">TETRIS 3D</div>
-        <p style="margin-bottom: 30px; color: #ccc;">SYSTEM READY // AWAITING INPUT</p>
-        <button class="cyber-btn" id="start-btn">INITIALIZE</button>
-        <div style="margin-top: 20px; font-size: 0.8rem; color: #888;">
+        <p style="margin-bottom: 20px; color: #ccc;">SYSTEM READY // SELECT MODE</p>
+        
+        <!-- モード選択UI -->
+        <div class="mode-selector">
+            <button class="cyber-btn mode-btn active" id="mode-normal">NORMAL</button>
+            <button class="cyber-btn mode-btn" id="mode-infinite">INFINITE</button>
+            <button class="cyber-btn mode-btn" id="mode-maniac">MANIAC</button>
+        </div>
+
+        <button class="cyber-btn" id="start-btn" style="margin-top: 0; font-size: 1.5rem; padding: 20px 50px;">INITIALIZE</button>
+        
+        <div style="margin-top: 30px; font-size: 0.8rem; color: #888; text-align: center;">
             ARROWS to Move/Rotate<br>
             SPACE to Drop<br>
             'P' or ESC to Pause
@@ -533,19 +564,36 @@ const COLS = 10;
 const ROWS = 20;
 const EMISSIVE_INTENSITY = 0.6;
 
+// SHAPES に MANIACモード用の複雑なペントミノ・トロミノ等を追加
 const SHAPES = [
     [], 
-    [[0,0], [1,0], [2,0], [3,0]], // I
-    [[0,0], [1,0], [0,1], [1,1]], // O
-    [[1,0], [0,1], [1,1], [2,1]], // T
-    [[1,0], [2,0], [0,1], [1,1]], // S
-    [[0,0], [1,0], [1,1], [2,1]], // Z
-    [[0,0], [0,1], [1,1], [2,1]], // J
-    [[2,0], [0,1], [1,1], [2,1]]  // L
+    [[0,0], [1,0], [2,0], [3,0]], // 1: I
+    [[0,0], [1,0], [0,1], [1,1]], // 2: O
+    [[1,0], [0,1], [1,1], [2,1]], // 3: T
+    [[1,0], [2,0], [0,1], [1,1]], // 4: S
+    [[0,0], [1,0], [1,1], [2,1]], // 5: Z
+    [[0,0], [0,1], [1,1], [2,1]], // 6: J
+    [[2,0], [0,1], [1,1], [2,1]], // 7: L
+    // --- MANIAC SHAPES ---
+    [[0,1], [1,1], [1,0]],                         // 8: V (角トロミノ)
+    [[0,1], [1,1], [2,1], [0,0], [2,0]],           // 9: U (U字ペントミノ)
+    [[0,2], [0,1], [1,1], [1,0], [2,0]],           // 10: W (階段状ペントミノ)
+    [[2,2], [2,1], [1,1], [1,0], [0,0]],           // 11: 逆W (階段状ペントミノ反転)
+    [[1,2], [0,1], [1,1], [2,1], [1,0]],           // 12: 十字 (プラスペントミノ)
+    [[0,2], [0,1], [1,1], [2,1], [2,0]],           // 13: ロングZ (N字ペントミノ)
+    [[2,2], [2,1], [1,1], [0,1], [0,0]]            // 14: ロング逆Z (逆N字ペントミノ)
 ];
 
 const COLORS = [
-    0x000000, 0x00ffff, 0xffff00, 0xaa00ff, 0x00ff00, 0xff0000, 0x0000ff, 0xffaa00
+    0x000000, 
+    0x00ffff, 0xffff00, 0xaa00ff, 0x00ff00, 0xff0000, 0x0000ff, 0xffaa00, // 1~7
+    0xffffff, // 8: 白
+    0x00ffaa, // 9: エメラルドグリーン
+    0xff00ff, // 10: マゼンタ
+    0xaaff00, // 11: ライムグリーン
+    0xff55aa, // 12: コーラルピンク
+    0xff8800, // 13: ディープオレンジ
+    0x0088ff  // 14: ディープスカイブルー
 ];
 
 class Tetris3D {
@@ -584,6 +632,7 @@ class Tetris3D {
         this.gameOver = false;
         this.paused = true; 
         this.gameStarted = false;
+        this.gameMode = 'normal'; // ゲームモード管理
 
         this.currentPiece = null;
         
@@ -676,6 +725,12 @@ class Tetris3D {
         this.paused = false;
         this.gameStarted = true;
 
+        // モード変更時にNEXTキューも現在のモードに合わせて再生成
+        this.nextQueue = [];
+        for(let i=0; i<3; i++) {
+            this.nextQueue.push(this.randomPieceType());
+        }
+
         this.updateUI();
 
         for(let y=0; y<ROWS; y++){
@@ -713,7 +768,21 @@ class Tetris3D {
     }
 
     randomPieceType() {
-        return Math.floor(Math.random() * 7) + 1;
+        if (this.gameMode === 'maniac') {
+            // 通常ブロック(1-7)の重みを2、マニアックブロック(8-14)の重みを1として抽選
+            const totalWeight = (7 * 2) + (7 * 1); // 14 + 7 = 21
+            let r = Math.floor(Math.random() * totalWeight);
+            
+            if (r < 14) {
+                // 0〜13: 通常ブロック (1〜7) に割り当て
+                return Math.floor(r / 2) + 1;
+            } else {
+                // 14〜20: マニアックブロック (8〜14) に割り当て
+                return (r - 14) + 8;
+            }
+        } else {
+            return Math.floor(Math.random() * 7) + 1; // 1~7 の通常形状のみ
+        }
     }
 
     spawnPiece() {
@@ -732,7 +801,7 @@ class Tetris3D {
             shape: shape,
             color: color,
             x: 3,
-            y: ROWS - 2,
+            y: ROWS - 3, // 少し下からスポーンさせてはみ出しを防ぐ
             group: new THREE.Group()
         };
 
@@ -824,6 +893,13 @@ class Tetris3D {
             case 6: // J
             case 7: // L
                 return {x: 1.0, y: 0.5}; 
+            case 8: return {x: 0.5, y: 0.5}; // V
+            case 9: return {x: 1.0, y: 0.5}; // U
+            case 10: return {x: 1.0, y: 1.0}; // W
+            case 11: return {x: 1.0, y: 1.0}; // 逆W
+            case 12: return {x: 1.0, y: 1.0}; // 十字
+            case 13: return {x: 1.0, y: 1.0}; // ロングZ
+            case 14: return {x: 1.0, y: 1.0}; // ロング逆Z
             default: return {x: 0, y: 0};
         }
     }
@@ -1005,7 +1081,11 @@ class Tetris3D {
             this.linesClearedTotal += linesCleared;
             if(this.linesClearedTotal >= this.level * 10) {
                 this.level++;
-                this.dropInterval = Math.max(100, 1000 - (this.level - 1) * 100);
+                
+                // モードが 'normal' または 'maniac' の場合のみ速度を上げる
+                if (this.gameMode === 'normal' || this.gameMode === 'maniac') {
+                    this.dropInterval = Math.max(100, 1000 - (this.level - 1) * 100);
+                }
             }
             this.updateUI();
             
@@ -1095,6 +1175,18 @@ class Tetris3D {
             btn.addEventListener('click', (e) => action());
         };
 
+        // モード選択ロジック
+        const setMode = (mode) => {
+            this.gameMode = mode;
+            document.getElementById('mode-normal').classList.toggle('active', mode === 'normal');
+            document.getElementById('mode-infinite').classList.toggle('active', mode === 'infinite');
+            document.getElementById('mode-maniac').classList.toggle('active', mode === 'maniac');
+        };
+
+        attachTouch('mode-normal', () => setMode('normal'));
+        attachTouch('mode-infinite', () => setMode('infinite'));
+        attachTouch('mode-maniac', () => setMode('maniac'));
+
         attachTouch('btn-left', () => { if(!this.paused && !this.gameOver) this.movePiece(-1); });
         attachTouch('btn-right', () => { if(!this.paused && !this.gameOver) this.movePiece(1); });
         attachTouch('btn-down', () => { if(!this.paused && !this.gameOver) this.dropPiece(); });
@@ -1118,24 +1210,8 @@ class Tetris3D {
         this.renderer.setSize(width, height);
 
         // 画面サイズに応じてカメラ距離を調整（ズームフィット）
-        // モバイル（縦長）の場合、横幅基準で距離を決めることで「横いっぱい」にする
         if (width <= 600) {
-            // 縦長の場合、横幅が収まるように距離を離す（あるいは近づける）計算
-            // ボードの幅は約10ユニット。FOV=60度。
-            // 必要な距離 = (幅/2) / tan(FOV/2) * (1/aspect) みたいな計算になるが、
-            // 簡易的に調整値を設定する。
-            // アスペクト比が小さい（縦長）ほど、Zを大きくしないと横が見切れる
-            // しかし「横いっぱいにしたい」＝余白を削りたいので、Zを適切に設定する。
-            
-            // 基準: アスペクト比0.5 (9:18) くらいで Z=35 くらいだと全体が入る
-            // これをアスペクト比に応じて可変にする
-            // 修正: 縮小して全体を表示するため、係数を大きくする (11.5 -> 18.5程度)
-            // これでボード全体が大きくなり、画面内に収まる
             this.camera.position.z = 13.0 / aspect; 
-            
-            // 修正: 画面下部に余白を作るため、カメラの注視点を下に下げる（8.5）
-            // これにより、Y=10（ボード中心）は画面中心より上に来る
-            // ★重要：カメラ位置のYも8.5に合わせることで「真正面」視点にする
             this.camera.position.y = 8.5; 
             this.camera.lookAt(4.5, 9.5, 0);
         } else {
@@ -1158,11 +1234,6 @@ class Tetris3D {
     animate(time = 0) {
         requestAnimationFrame((t) => this.animate(t));
 
-        // NEXT表示の回転アニメーションを削除（静止させる）
-        // if (this.nextGroup) {
-        //      this.nextGroup.rotation.y = Math.sin(time * 0.0005) * 0.2;
-        //      this.nextGroup.rotation.x = Math.sin(time * 0.0003) * 0.1;
-        // }
         if (this.nextRenderer && this.nextScene && this.nextCamera) {
              this.nextRenderer.render(this.nextScene, this.nextCamera);
         }
@@ -1201,10 +1272,7 @@ class Tetris3D {
         // カメラの中心座標を4.5に固定し、揺らぎを加える
         this.camera.position.x = 4.5 + Math.sin(time * 0.0005) * 0.5;
         
-        // 修正: animateループ内でもY=8.5を維持する
         if (window.innerWidth <= 600) {
-             // カメラ位置は onResize で設定した Y=8.5 を基準にするため、ここではYを上書きしない
-             // もし揺らぎを入れるなら Y = 8.5 + sin... とする
              this.camera.lookAt(4.5, 9.5, 0); 
         } else {
              this.camera.lookAt(4.5, 10, 0);
